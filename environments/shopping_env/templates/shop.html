@@ -1,0 +1,220 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gym-Anything | Shopping Environment</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 25px;
+            background: #f5f6fa;
+            color: #222;
+        }
+
+        header {
+            background: #252b48;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+        }
+
+        .filters {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 25px;
+        }
+
+        input, select, button {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+        }
+
+        button {
+            cursor: pointer;
+            background: #252b48;
+            color: white;
+        }
+
+        .products {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 18px;
+        }
+
+        .product {
+            background: white;
+            padding: 18px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px #ddd;
+        }
+
+        .product h3 {
+            margin-top: 5px;
+        }
+
+        .price {
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .cart {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 30px;
+        }
+
+        #message {
+            margin: 15px 0;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h1>Gym-Anything Shopping</h1>
+    <p>Simulated fashion shopping environment</p>
+</header>
+
+<section class="filters">
+    <input id="search" placeholder="Search products">
+
+    <select id="color">
+        <option value="">All colours</option>
+        <option value="Black">Black</option>
+        <option value="White">White</option>
+    </select>
+
+    <select id="size">
+        <option value="">All sizes</option>
+        <option value="7">Size 7</option>
+        <option value="8">Size 8</option>
+    </select>
+
+    <input id="max_price" type="number" placeholder="Maximum price">
+
+    <select id="sort">
+        <option value="">Default sorting</option>
+        <option value="price_low">Price: Low to High</option>
+        <option value="price_high">Price: High to Low</option>
+    </select>
+
+    <button onclick="loadProducts()">Apply Filters</button>
+</section>
+
+<div id="message"></div>
+
+<h2>Products</h2>
+<section id="products" class="products"></section>
+
+<section class="cart">
+    <h2>Shopping Cart (<span id="cart-count">0</span>)</h2>
+    <div id="cart-items">Your cart is empty.</div>
+</section>
+
+<script>
+async function loadProducts() {
+    const params = new URLSearchParams({
+        search: document.getElementById("search").value,
+        color: document.getElementById("color").value,
+        size: document.getElementById("size").value,
+        max_price: document.getElementById("max_price").value,
+        sort: document.getElementById("sort").value
+    });
+
+    const response = await fetch("/api/products?" + params);
+    const products = await response.json();
+
+    const container = document.getElementById("products");
+    container.innerHTML = "";
+
+    if (products.length === 0) {
+        container.textContent = "No matching products found.";
+        return;
+    }
+
+    products.forEach(product => {
+        const card = document.createElement("div");
+        card.className = "product";
+
+        const name = document.createElement("h3");
+        name.textContent = product.name;
+
+        const details = document.createElement("p");
+        details.textContent =
+            product.brand + " | " + product.color +
+            " | Size " + product.size;
+
+        const price = document.createElement("p");
+        price.className = "price";
+        price.textContent = "₹" + product.price;
+
+        const rating = document.createElement("p");
+        rating.textContent = "Rating: " + product.rating + "/5";
+
+        const button = document.createElement("button");
+        button.textContent = "Add to Cart";
+        button.onclick = () => addToCart(product.id);
+
+        card.append(name, details, price, rating, button);
+        container.appendChild(card);
+    });
+}
+
+async function addToCart(productId) {
+    const response = await fetch("/api/cart/add", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({product_id: productId})
+    });
+
+    const data = await response.json();
+
+    document.getElementById("message").textContent =
+        data.message || data.error;
+
+    loadCart();
+}
+
+async function loadCart() {
+    const response = await fetch("/api/cart");
+    const cart = await response.json();
+
+    document.getElementById("cart-count").textContent = cart.length;
+
+    const container = document.getElementById("cart-items");
+    container.innerHTML = "";
+
+    if (cart.length === 0) {
+        container.textContent = "Your cart is empty.";
+        return;
+    }
+
+    cart.forEach(product => {
+        const item = document.createElement("p");
+        item.textContent =
+            product.name + " — ₹" + product.price;
+
+        container.appendChild(item);
+    });
+}
+
+loadProducts();
+loadCart();
+</script>
+
+</body>
+</html>
+

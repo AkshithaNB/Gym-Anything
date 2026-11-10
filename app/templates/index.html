@@ -1,0 +1,400 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gym-Anything | Agent Dashboard</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
+            margin: 0;
+            padding: 30px;
+        }
+
+        .container {
+            max-width: 850px;
+            margin: auto;
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+        }
+
+        h1, h2, h3 {
+            color: #222;
+        }
+
+        .agent-section {
+            background: #f8f9fc;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        input, textarea, select, button {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px;
+            margin: 8px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        button {
+            background: #222;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #444;
+        }
+
+        .panel {
+            background: white;
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .muted {
+            color: #666;
+            font-size: 13px;
+        }
+
+        .success {
+            color: #166534;
+        }
+
+        .failure {
+            color: #b91c1c;
+        }
+
+        .result-item {
+            border-bottom: 1px solid #eee;
+            padding: 8px 0;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>Gym-Anything</h1>
+
+    <p>Reliable and Verifiable Software-Agent Environment</p>
+
+    <div class="agent-section">
+
+        <h2>AI Agent</h2>
+
+        <p>
+            Describe the task you want the agent to perform.
+            Gym-Anything will identify the appropriate environment.
+        </p>
+
+        <form action="/run_agent" method="POST">
+
+            <label for="prompt">Your Instructions</label>
+
+            <textarea
+                id="prompt"
+                name="prompt"
+                placeholder="Examples:
+Create a task called Complete project report.
+Fill my Google Form using my saved profile.
+Find black sneakers in size 7 under 2000 and add the cheapest one to my cart."
+                required></textarea>
+
+            <label for="website_url">
+                Website URL (only required for Google Forms)
+            </label>
+
+            <input
+                type="url"
+                id="website_url"
+                name="website_url"
+                placeholder="Paste your Google Forms URL here">
+
+            <button type="submit">Run Agent</button>
+
+        </form>
+
+        <p class="muted">
+            The agent will classify your prompt, execute the task,
+            and report its verification result.
+        </p>
+
+        <div id="agent-status" class="panel">
+            Agent is ready.
+        </div>
+
+        <div id="environment-box" class="panel hidden">
+
+            <h3>Select an Environment</h3>
+
+            <p id="environment-message">
+                Please select the environment for your task.
+            </p>
+
+            <form action="/select_environment" method="POST">
+
+                <select id="environment" name="environment" required>
+                    <option value="">Select environment</option>
+                    <option value="task_manager">Task Manager</option>
+                    <option value="google_forms">Google Forms</option>
+                    <option value="shopping">Shopping</option>
+                </select>
+
+                <button type="submit">Confirm Environment</button>
+
+            </form>
+
+        </div>
+
+        <div id="question-box" class="panel hidden">
+
+            <h3>Agent Needs Your Help</h3>
+
+            <p id="agent-question"></p>
+
+            <form action="/submit_answer" method="POST">
+
+                <textarea
+                    name="answer"
+                    placeholder="Enter your answer here..."
+                    required></textarea>
+
+                <button type="submit">Send Answer</button>
+
+            </form>
+
+        </div>
+
+        <div id="agent-report" class="panel hidden"></div>
+
+    </div>
+
+</div>
+
+
+<script>
+
+async function checkAgentStatus() {
+
+    try {
+
+        const response = await fetch("/agent_status");
+        const data = await response.json();
+
+        const statusBox = document.getElementById("agent-status");
+        const questionBox = document.getElementById("question-box");
+        const questionText = document.getElementById("agent-question");
+        const reportBox = document.getElementById("agent-report");
+        const environmentBox = document.getElementById("environment-box");
+        const environmentMessage = document.getElementById("environment-message");
+
+        if (data.status === "running") {
+
+            statusBox.textContent =
+                "Agent is working in: " +
+                (data.title || data.environment || "selected environment");
+
+            questionBox.classList.add("hidden");
+            environmentBox.classList.add("hidden");
+            reportBox.classList.add("hidden");
+
+        }
+
+        else if (data.status === "waiting_for_user") {
+
+            statusBox.textContent = "Agent is waiting for your answer.";
+
+            questionText.textContent = data.current_question || "";
+
+            questionBox.classList.remove("hidden");
+            environmentBox.classList.add("hidden");
+            reportBox.classList.add("hidden");
+
+        }
+
+        else if (data.status === "needs_environment") {
+
+            statusBox.textContent = "Environment selection is required.";
+
+            environmentMessage.textContent =
+                data.message || "Please choose an environment.";
+
+            environmentBox.classList.remove("hidden");
+            questionBox.classList.add("hidden");
+            reportBox.classList.add("hidden");
+
+        }
+
+        else if (data.status === "completed") {
+
+            statusBox.textContent = "Agent completed the task.";
+
+            reportBox.classList.remove("hidden");
+            reportBox.innerHTML = "";
+
+            const heading = document.createElement("h3");
+            heading.textContent = "Execution Report";
+            reportBox.appendChild(heading);
+
+            const environment = document.createElement("p");
+            environment.textContent =
+                "Environment: " + (data.title || data.environment || "Not specified");
+            reportBox.appendChild(environment);
+
+            const resultsHeading = document.createElement("h4");
+            resultsHeading.textContent = "Execution Results";
+            reportBox.appendChild(resultsHeading);
+
+            (data.results || []).forEach(item => {
+
+                const paragraph = document.createElement("p");
+                paragraph.className = "result-item";
+                paragraph.textContent =
+                    (item.question || "Task") +
+                    " — " + (item.status || "") +
+                    (item.deadline ? " — Deadline: " + item.deadline : "") +
+                    (item.priority ? " — Priority: " + item.priority : "");
+
+                reportBox.appendChild(paragraph);
+
+            });
+
+            if (data.verification) {
+
+                const verification = data.verification;
+
+                const verificationHeading = document.createElement("h4");
+                verificationHeading.textContent = "Independent Verification";
+                reportBox.appendChild(verificationHeading);
+
+                const result = document.createElement("p");
+
+                const verificationStatus =
+                    verification.verification_status ||
+                    verification.status ||
+                    "Not available";
+
+                result.textContent =
+                    "Verification Status: " + verificationStatus;
+
+                result.className =
+                    verificationStatus === "PASSED" ? "success" : "failure";
+
+                reportBox.appendChild(result);
+
+                if (verification.verified_fields !== undefined) {
+
+                    const fields = document.createElement("p");
+
+                    fields.textContent =
+                        "Verified fields: " +
+                        verification.verified_fields +
+                        " / " +
+                        verification.total_fields;
+
+                    reportBox.appendChild(fields);
+
+                }
+
+                if (verification.expected_status) {
+
+                    const expected = document.createElement("p");
+
+                    expected.textContent =
+                        "Expected status: " + verification.expected_status;
+
+                    reportBox.appendChild(expected);
+
+                }
+
+                if (verification.actual_status) {
+
+                    const actual = document.createElement("p");
+
+                    actual.textContent =
+                        "Actual status: " + verification.actual_status;
+
+                    reportBox.appendChild(actual);
+
+                }
+
+            }
+
+            const message = document.createElement("p");
+            message.textContent = data.message || "Task execution finished.";
+            reportBox.appendChild(message);
+
+            questionBox.classList.add("hidden");
+            environmentBox.classList.add("hidden");
+
+        }
+
+        else if (data.status === "failed") {
+
+            statusBox.textContent =
+                "Agent failed: " + (data.error || "Unknown error");
+
+            reportBox.classList.remove("hidden");
+            reportBox.innerHTML = "";
+
+            const message = document.createElement("p");
+            message.textContent =
+                data.message || "The task could not be completed.";
+
+            reportBox.appendChild(message);
+
+            if (data.error) {
+
+                const error = document.createElement("p");
+                error.textContent = data.error;
+                error.className = "failure";
+
+                reportBox.appendChild(error);
+
+            }
+
+            questionBox.classList.add("hidden");
+            environmentBox.classList.add("hidden");
+
+        }
+
+        else {
+
+            statusBox.textContent = "Agent is ready.";
+
+        }
+
+    } catch (error) {
+
+        console.error("Status check failed:", error);
+
+    }
+
+}
+
+setInterval(checkAgentStatus, 1000);
+checkAgentStatus();
+
+</script>
+
+</body>
+</html>
