@@ -1,138 +1,201 @@
-
 # Gym-Anything
-
 ### A Framework for Reliable and Verifiable Software-Agent Training Environments
 
 ## 1. Project Overview
 
-Gym-Anything is a framework designed to develop, execute and evaluate software agents across multiple application environments.
+Gym-Anything is a framework designed to develop, execute, and evaluate software agents across multiple application environments.
 
-It aims to improve the reliability and verifiability of agents performing multi-step tasks in different software applications.
+The framework enables agents to understand user instructions, select appropriate environments, perform tasks, and independently verify execution results.
 
-## 2. Objectives
+It aims to improve the reliability, accountability, and verifiability of software agents performing multi-step tasks.
 
-- Develop agents capable of performing tasks across multiple environments.
+## 2. Problem Statement
+
+Software agents can perform tasks across applications, but ensuring that their actions are correct and that the intended outcomes have actually occurred remains challenging.
+
+Gym-Anything addresses this problem through specialized agents, controlled execution environments, independent verification, and execution evidence.
+
+## 3. Key Objectives
+
+- Develop agents capable of executing tasks across multiple environments.
 - Support environment creation and readiness auditing.
-- Execute user instructions through specialized agents.
-- Verify task outcomes against application state.
+- Understand and interpret natural-language instructions.
+- Execute tasks through specialized agents.
+- Verify outcomes against actual application state.
 - Maintain execution and verification evidence.
 - Evaluate agent performance using measurable metrics.
 
-## 3. System Architecture
+## 4. System Architecture
 
-The framework includes:
+The framework consists of the following components:
 
-- Creation Agent
-- Audit Agent
-- Execution Agent
-- Environment Selector
-- Verification Module
-- Evaluation Module
+| Component | Responsibility |
+|---|---|
+| Creation Agent | Structures user instructions into executable tasks. |
+| Audit Agent | Checks task and environment readiness. |
+| Environment Selector | Selects the appropriate execution environment. |
+| Execution Agent | Performs the requested task. |
+| Verification Module | Independently checks execution results. |
+| Evaluation Module | Measures agent performance. |
 
-## 4. Supported Environments
+### Workflow
 
-### Task Manager
-Supports task creation, updating, deletion and retrieval.
+User Instruction → Creation Agent → Audit Agent → Environment Selector → Execution Agent → Independent Verifier → Evaluation and Evidence
 
-### Google Forms
-Supports form-question understanding, profile-based answer generation and form filling. Final submission can be reviewed manually.
+## 5. Supported Environments
 
-### Shopping Sandbox
-Supports product searching, filtering, sorting and cart operations using synthetic products.
+### 5.1 Task Manager
 
-## 5. Technology Stack
+- Create tasks.
+- Update task details and status.
+- Delete tasks.
+- Retrieve existing tasks.
+- Store task information using SQLite.
+
+### 5.2 Google Forms Environment
+
+- Inspect and understand form questions.
+- Retrieve relevant information from the logged-in user's profile.
+- Match questions with saved profile information.
+- Generate AI-assisted draft answers for open-ended questions.
+- Allow users to approve, edit, or reject suggested answers.
+- Fill supported form fields using Playwright.
+- Verify filled answers independently.
+
+Final form submission remains under user control.
+
+### 5.3 Shopping Sandbox
+
+- Search available synthetic products.
+- Filter and sort products.
+- Add products to the shopping cart.
+- Remove products from the cart.
+- View cart contents.
+
+The shopping environment is simulated and does not perform real purchases or payments.
+
+## 6. Multi-Agent Architecture
+
+Gym-Anything uses specialized agents to divide responsibilities across the execution workflow.
+
+- **Creation Agent:** Converts user instructions into structured tasks.
+- **Audit Agent:** Checks whether the requested task and environment are ready.
+- **Environment Selector:** Determines which environment should handle the task.
+- **Execution Agent:** Carries out the task.
+- **Independent Verifier:** Checks whether the expected result was achieved.
+- **Evaluation Module:** Records performance-related metrics.
+
+## 7. Technology Stack
 
 - Python
 - Flask
 - SQLite
-- HTML, CSS and JavaScript
 - Playwright
+- Ollama / Llama 3
+- HTML
+- CSS
+- JavaScript
 - JSON
 
-## 6. Project Structure
+## 8. Project Structure
 
 ```text
 Gym-Anything/
-├── agent_state/
+│
 ├── agents/
+│   ├── agent_session.py
+│   ├── creation_agent.py
+│   ├── audit_agent.py
+│   ├── environment_selector.py
+│   ├── execution_agent.py
+│   ├── google_forms_agent.py
+│   └── shopping_execution_agent.py
+│
 ├── app/
+│   ├── application.py
+│   ├── auth.py
+│   ├── database.py
+│   └── templates/
+│
 ├── environments/
+│   └── shopping_env/
+│       ├── app.py
+│       ├── products.json
+│       └── templates/
+│
 ├── evaluation/
-├── evidence/
 ├── tasks/
 ├── tests/
-├── user_profile/
 ├── verification/
 ├── requirements.txt
+├── .gitignore
 └── README.md
 ```
 
-## 7. Installation
+## 9. Installation
 
-Clone the repository:
+### Step 1: Clone the repository
 
 ```bash
 git clone https://github.com/AkshithaNB/Gym-Anything.git
 cd Gym-Anything
 ```
 
-Create a virtual environment:
+### Step 2: Create a virtual environment
 
 ```bash
 python -m venv .venv
 ```
 
-Activate it on Windows:
+### Step 3: Activate the environment (Windows)
 
-```bash
-.venv\Scripts\activate
+```powershell
+.venv\Scripts\Activate.ps1
 ```
 
-Install dependencies:
+### Step 4: Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Install Playwright browsers if required:
+### Step 5: Install Playwright browsers
 
 ```bash
 playwright install
 ```
 
-## 8. Running the Application
+## 10. Running the Application
 
-Start the main application:
+### Main Gym-Anything Application
 
-```bash
-python -m app.application
+Start the main application from the project directory:
+
+```powershell
+python -c "from app.application import app; app.run(host='127.0.0.1', port=5055, debug=False, threaded=True)"
 ```
 
 Open:
 
-```text
-http://127.0.0.1:5000
-```
+http://127.0.0.1:5055
 
-Start the Shopping environment in a separate terminal:
+### Shopping Sandbox
 
-```bash
+Open a separate terminal and run:
+
+```powershell
 python environments/shopping_env/app.py
 ```
 
 Open:
 
-```text
 http://127.0.0.1:5001
-```
 
-## 9. Evidence and Evaluation
+## 11. Verification and Evaluation
 
-The `evidence/` directory stores execution and verification logs.
+The Independent Verifier checks whether the expected task outcomes match the actual execution results.
 
-The `evaluation/` directory stores evaluation-related files and results.
-
-Evaluation metrics include:
+The framework includes evaluation-related metrics such as:
 
 - Task Success Rate
 - Verification Agreement
@@ -140,31 +203,28 @@ Evaluation metrics include:
 - Number of Execution Steps
 - Environment Setup Success Rate
 
-Actual experimental results should be reported based on completed test runs.
+Execution and verification evidence is maintained in the project for inspection.
 
-## 10. Reproducibility
+Actual performance metrics should be reported based on completed experimental runs.
 
-1. Clone the repository.
-2. Install the required dependencies.
-3. Configure the required user profile and environment settings.
-4. Start the main application and required environment servers.
-5. Execute test instructions through the dashboard.
-6. Inspect execution and verification logs.
-7. Compare actual application state with expected outcomes.
+## 12. Safety and Limitations
 
-## 11. Safety and Limitations
+- Google Forms answers require user review before final submission.
+- Shopping operations use synthetic product data.
+- No real purchases or payments are performed.
+- User-specific information should only be accessed for the authenticated user.
+- Supported form field types and application interactions may vary.
+- Agent execution can be affected by changes in external application interfaces.
 
-- Shopping operations use a synthetic product environment.
-- Google Forms answers should be reviewed before final submission.
-- Test data should be used during evaluation.
-- Agent execution and verification may have environment-specific limitations.
+## 13. Future Enhancements
 
-## 12. Contributors
+- Support additional application environments.
+- Improve handling of dropdowns, radio buttons, and checkboxes.
+- Strengthen multi-user data isolation.
+- Expand independent verification mechanisms.
+- Introduce more comprehensive evaluation benchmarks.
+- Improve agent reliability across complex multi-step workflows.
 
-- Akshitha
-- Team Member 2
-- Team Member 3
+## 14. Repository
 
-## 13. Repository
-
-https://github.com/AkshithaNB/Gym-Anything
+GitHub: https://github.com/AkshithaNB/Gym-Anything
