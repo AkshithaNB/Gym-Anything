@@ -15,7 +15,7 @@
         }
 
         .container {
-            max-width: 850px;
+            max-width: 1000px;
             margin: auto;
             background: white;
             padding: 25px;
@@ -24,6 +24,54 @@
 
         h1, h2, h3 {
             color: #222;
+        }
+
+        /* Dashboard header */
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .top-bar h1 {
+            margin-bottom: 5px;
+        }
+
+        .top-bar p {
+            margin-top: 5px;
+        }
+
+        /* Profile menu */
+        .profile-menu {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .profile-menu a {
+            text-decoration: none;
+            color: #222;
+            font-weight: bold;
+        }
+
+        .profile-menu a:hover {
+            color: #555;
+        }
+
+        .profile-icon {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background: #252a4a;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: bold;
         }
 
         .agent-section {
@@ -57,6 +105,11 @@
             background: #444;
         }
 
+        button:disabled {
+            background: #888;
+            cursor: not-allowed;
+        }
+
         .panel {
             background: white;
             padding: 15px;
@@ -86,6 +139,24 @@
             border-bottom: 1px solid #eee;
             padding: 8px 0;
         }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                padding: 15px;
+            }
+
+            .top-bar {
+                align-items: flex-start;
+            }
+
+            .profile-menu {
+                flex-wrap: wrap;
+            }
+        }
     </style>
 </head>
 
@@ -93,10 +164,45 @@
 
 <div class="container">
 
-    <h1>Gym-Anything</h1>
+    <!-- Dashboard Header -->
+    <div class="top-bar">
+
+        <div>
+            <h1>Gym-Anything</h1>
+
+            <p>
+                Welcome,
+                {{ session.get('user_name', 'User') }}!
+            </p>
+        </div>
+
+        <!-- Profile Menu -->
+        <div class="profile-menu">
+
+            <a href="{{ url_for('auth.profile') }}"
+               title="Edit Profile">
+
+                <div class="profile-icon">
+                    {{ session.get('user_name', 'U')[0]|upper }}
+                </div>
+
+            </a>
+
+            <a href="{{ url_for('auth.profile') }}">
+                Edit Profile
+            </a>
+
+            <a href="{{ url_for('auth.logout') }}">
+                Logout
+            </a>
+
+        </div>
+
+    </div>
 
     <p>Reliable and Verifiable Software-Agent Environment</p>
 
+    <!-- AI Agent Section -->
     <div class="agent-section">
 
         <h2>AI Agent</h2>
@@ -138,10 +244,12 @@ Find black sneakers in size 7 under 2000 and add the cheapest one to my cart."
             and report its verification result.
         </p>
 
+        <!-- Agent Status -->
         <div id="agent-status" class="panel">
             Agent is ready.
         </div>
 
+        <!-- Environment Selection -->
         <div id="environment-box" class="panel hidden">
 
             <h3>Select an Environment</h3>
@@ -165,6 +273,7 @@ Find black sneakers in size 7 under 2000 and add the cheapest one to my cart."
 
         </div>
 
+        <!-- User Input Required -->
         <div id="question-box" class="panel hidden">
 
             <h3>Agent Needs Your Help</h3>
@@ -184,12 +293,70 @@ Find black sneakers in size 7 under 2000 and add the cheapest one to my cart."
 
         </div>
 
+        <!-- Suggested Answer Approval -->
+        <div id="approval-box" class="panel hidden">
+
+            <h3>Review Suggested Answer</h3>
+
+            <p><strong>Question:</strong></p>
+            <p id="approval-question"></p>
+
+            <p><strong>Suggested answer:</strong></p>
+
+            <textarea id="suggested-answer" readonly></textarea>
+
+            <div id="edit-answer-box" class="hidden">
+
+                <label for="edited-answer">
+                    Edit your answer
+                </label>
+
+                <textarea
+                    id="edited-answer"
+                    placeholder="Enter your corrected answer">
+                </textarea>
+
+            </div>
+
+            <button
+                type="button"
+                id="approve-button"
+                onclick="submitApproval('approve')">
+                Approve
+            </button>
+
+            <button
+                type="button"
+                id="edit-button"
+                onclick="showEditAnswer()">
+                Edit Answer
+            </button>
+
+            <button
+                type="button"
+                id="save-edited-answer"
+                class="hidden"
+                onclick="submitApproval('edit')">
+                Save Edited Answer
+            </button>
+
+            <button
+                type="button"
+                id="reject-button"
+                onclick="submitApproval('reject')">
+                Reject
+            </button>
+
+            <p id="approval-message" class="muted"></p>
+
+        </div>
+
+        <!-- Execution Report -->
         <div id="agent-report" class="panel hidden"></div>
 
     </div>
 
 </div>
-
 
 <script>
 
@@ -198,6 +365,11 @@ async function checkAgentStatus() {
     try {
 
         const response = await fetch("/agent_status");
+
+        if (!response.ok) {
+            throw new Error("Unable to retrieve agent status.");
+        }
+
         const data = await response.json();
 
         const statusBox = document.getElementById("agent-status");
@@ -206,7 +378,10 @@ async function checkAgentStatus() {
         const reportBox = document.getElementById("agent-report");
         const environmentBox = document.getElementById("environment-box");
         const environmentMessage = document.getElementById("environment-message");
+        const approvalBox = document.getElementById("approval-box");
+        approvalBox.classList.add("hidden");
 
+        // Agent is running
         if (data.status === "running") {
 
             statusBox.textContent =
@@ -216,37 +391,94 @@ async function checkAgentStatus() {
             questionBox.classList.add("hidden");
             environmentBox.classList.add("hidden");
             reportBox.classList.add("hidden");
+            approvalBox.classList.add("hidden");
+
+        }
+        else if (data.status === "waiting_for_approval") {
+
+    statusBox.textContent = "Please review the AI-generated answer.";
+
+    document.getElementById("approval-question").textContent =
+        data.current_question || "";
+
+    document.getElementById("suggested-answer").value =
+        data.suggested_answer || "";
+
+    document.getElementById("approval-message").textContent = "";
+
+    document.getElementById("edit-answer-box").classList.add("hidden");
+    document.getElementById("save-edited-answer").classList.add("hidden");
+
+    approvalBox.classList.remove("hidden");
+
+    questionBox.classList.add("hidden");
+    environmentBox.classList.add("hidden");
+    reportBox.classList.add("hidden");
+}
+
+        // Agent needs information from the user
+        else if (data.status === "waiting_for_user") {
+
+            statusBox.textContent =
+                "Agent is waiting for your answer.";
+
+            questionText.textContent =
+                data.current_question || "";
+
+            questionBox.classList.remove("hidden");
+            environmentBox.classList.add("hidden");
+            reportBox.classList.add("hidden");
+            approvalBox.classList.add("hidden");
 
         }
 
-        else if (data.status === "waiting_for_user") {
+        // Agent needs approval for a suggested answer
+        else if (data.status === "waiting_for_approval") {
 
-            statusBox.textContent = "Agent is waiting for your answer.";
+            statusBox.textContent =
+                "Agent is waiting for your approval.";
 
-            questionText.textContent = data.current_question || "";
+            document.getElementById("approval-question").textContent =
+                data.current_question || "";
 
-            questionBox.classList.remove("hidden");
+            document.getElementById("suggested-answer").value =
+                data.suggested_answer || "";
+
+            document.getElementById("approval-message").textContent = "";
+
+            document.getElementById("edit-answer-box").classList.add("hidden");
+            document.getElementById("save-edited-answer").classList.add("hidden");
+
+            approvalBox.classList.remove("hidden");
+
+            questionBox.classList.add("hidden");
             environmentBox.classList.add("hidden");
             reportBox.classList.add("hidden");
 
         }
 
+        // Environment selection required
         else if (data.status === "needs_environment") {
 
-            statusBox.textContent = "Environment selection is required.";
+            statusBox.textContent =
+                "Environment selection is required.";
 
             environmentMessage.textContent =
                 data.message || "Please choose an environment.";
 
             environmentBox.classList.remove("hidden");
+
             questionBox.classList.add("hidden");
             reportBox.classList.add("hidden");
+            approvalBox.classList.add("hidden");
 
         }
 
+        // Task completed
         else if (data.status === "completed") {
 
-            statusBox.textContent = "Agent completed the task.";
+            statusBox.textContent =
+                "Agent completed the task.";
 
             reportBox.classList.remove("hidden");
             reportBox.innerHTML = "";
@@ -256,8 +488,11 @@ async function checkAgentStatus() {
             reportBox.appendChild(heading);
 
             const environment = document.createElement("p");
+
             environment.textContent =
-                "Environment: " + (data.title || data.environment || "Not specified");
+                "Environment: " +
+                (data.title || data.environment || "Not specified");
+
             reportBox.appendChild(environment);
 
             const resultsHeading = document.createElement("h4");
@@ -267,7 +502,9 @@ async function checkAgentStatus() {
             (data.results || []).forEach(item => {
 
                 const paragraph = document.createElement("p");
+
                 paragraph.className = "result-item";
+
                 paragraph.textContent =
                     (item.question || "Task") +
                     " — " + (item.status || "") +
@@ -278,12 +515,15 @@ async function checkAgentStatus() {
 
             });
 
+            // Independent verification
             if (data.verification) {
 
                 const verification = data.verification;
 
                 const verificationHeading = document.createElement("h4");
-                verificationHeading.textContent = "Independent Verification";
+                verificationHeading.textContent =
+                    "Independent Verification";
+
                 reportBox.appendChild(verificationHeading);
 
                 const result = document.createElement("p");
@@ -297,7 +537,9 @@ async function checkAgentStatus() {
                     "Verification Status: " + verificationStatus;
 
                 result.className =
-                    verificationStatus === "PASSED" ? "success" : "failure";
+                    verificationStatus === "PASSED"
+                    ? "success"
+                    : "failure";
 
                 reportBox.appendChild(result);
 
@@ -320,7 +562,8 @@ async function checkAgentStatus() {
                     const expected = document.createElement("p");
 
                     expected.textContent =
-                        "Expected status: " + verification.expected_status;
+                        "Expected status: " +
+                        verification.expected_status;
 
                     reportBox.appendChild(expected);
 
@@ -331,7 +574,8 @@ async function checkAgentStatus() {
                     const actual = document.createElement("p");
 
                     actual.textContent =
-                        "Actual status: " + verification.actual_status;
+                        "Actual status: " +
+                        verification.actual_status;
 
                     reportBox.appendChild(actual);
 
@@ -340,23 +584,30 @@ async function checkAgentStatus() {
             }
 
             const message = document.createElement("p");
-            message.textContent = data.message || "Task execution finished.";
+
+            message.textContent =
+                data.message || "Task execution finished.";
+
             reportBox.appendChild(message);
 
             questionBox.classList.add("hidden");
             environmentBox.classList.add("hidden");
+            approvalBox.classList.add("hidden");
 
         }
 
+        // Task failed
         else if (data.status === "failed") {
 
             statusBox.textContent =
-                "Agent failed: " + (data.error || "Unknown error");
+                "Agent failed: " +
+                (data.error || "Unknown error");
 
             reportBox.classList.remove("hidden");
             reportBox.innerHTML = "";
 
             const message = document.createElement("p");
+
             message.textContent =
                 data.message || "The task could not be completed.";
 
@@ -365,6 +616,7 @@ async function checkAgentStatus() {
             if (data.error) {
 
                 const error = document.createElement("p");
+
                 error.textContent = data.error;
                 error.className = "failure";
 
@@ -374,12 +626,18 @@ async function checkAgentStatus() {
 
             questionBox.classList.add("hidden");
             environmentBox.classList.add("hidden");
+            approvalBox.classList.add("hidden");
 
         }
 
+        // Default state
         else {
 
             statusBox.textContent = "Agent is ready.";
+
+            questionBox.classList.add("hidden");
+            environmentBox.classList.add("hidden");
+            approvalBox.classList.add("hidden");
 
         }
 
@@ -391,7 +649,61 @@ async function checkAgentStatus() {
 
 }
 
+
+// Display the edit-answer field
+function showEditAnswer() {
+
+    document.getElementById("edit-answer-box")
+        .classList.remove("hidden");
+
+    document.getElementById("save-edited-answer")
+        .classList.remove("hidden");
+
+    document.getElementById("edited-answer").value =
+        document.getElementById("suggested-answer").value;
+
+}
+
+
+// Send approval, edit or rejection to Flask
+async function submitApproval(decision) {
+
+    let answer = "";
+
+    if (decision === "approve") {
+        answer = document.getElementById("suggested-answer").value;
+    }
+    else if (decision === "edit") {
+        answer = document.getElementById("edited-answer").value;
+    }
+
+    if (decision !== "reject" && !answer.trim()) {
+        document.getElementById("approval-message").textContent =
+            "Please enter an answer before submitting.";
+        return;
+    }
+
+    const response = await fetch("/submit_approval", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            decision: decision,
+            answer: answer
+        })
+    });
+
+    const data = await response.json();
+
+    document.getElementById("approval-message").textContent =
+        data.message || data.error || "Response submitted.";
+}
+
+
+// Check the agent status every second
 setInterval(checkAgentStatus, 1000);
+
 checkAgentStatus();
 
 </script>

@@ -1,4 +1,6 @@
 
+
+
 import json
 import re
 from pathlib import Path
@@ -21,13 +23,13 @@ EVIDENCE_DIR = BASE_DIR / "evidence"
 def parse_deadline(prompt):
     text = prompt.lower()
 
-    match = re.search(
-        r"\b(\d{4}-\d{2}-\d{2})\b",
-        text
-    )
+    match = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", text)
 
     if match:
-        return match.group(1)
+        try:
+            return date.fromisoformat(match.group(1)).isoformat()
+        except ValueError:
+            return None
 
     match = re.search(
         r"\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s*(\d{4})?\b",
@@ -61,24 +63,34 @@ def parse_deadline(prompt):
     return None
 
 
-def save_evidence(result):
-    EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+def save_evidence(result, user_id):
+    """Save evidence separately for each user."""
 
-    with open(
-        EVIDENCE_DIR / "execution_log.json",
-        "w",
-        encoding="utf-8"
-    ) as file:
+    user_evidence_dir = EVIDENCE_DIR / f"user_{user_id}"
+    user_evidence_dir.mkdir(parents=True, exist_ok=True)
+
+    evidence_file = user_evidence_dir / "execution_log.json"
+
+    with open(evidence_file, "w", encoding="utf-8") as file:
         json.dump(result, file, indent=4, default=str)
 
 
-def execute_task(prompt, new_status="Completed"):
+def execute_task(prompt, user_id, new_status="Completed"):
+    """
+    Execute Task Manager operations for one authenticated user.
+
+    user_id is required to prevent access to another user's tasks.
+    """
+
+    if user_id is None:
+        raise ValueError("A valid user ID is required.")
 
     text = prompt.lower().strip()
 
     result = {
         "agent": "Task Manager Agent",
         "task": prompt,
+        "user_id": user_id,
         "status": "FAILED",
         "results": [],
         "verification": None,
@@ -87,21 +99,24 @@ def execute_task(prompt, new_status="Completed"):
 
     try:
 
-        # READ: Show tasks with deadlines.
+        # READ: Show tasks.
         if any(word in text for word in (
             "show", "list", "display", "view", "find"
         )):
 
             if "overdue" in text:
-                tasks = get_overdue_tasks()
+                tasks = get_overdue_tasks(user_id=user_id)
                 operation = "Overdue tasks"
 
             elif "deadline" in text or "due" in text:
-                tasks = get_tasks_with_deadlines()
+                tasks = get_tasks_with_deadlines(user_id=user_id)
                 operation = "Tasks with deadlines"
 
                 if "this week" in text:
-                    end_date = (date.today() + timedelta(days=7)).isoformat()
+                    end_date = (
+                        date.today() + timedelta(days=7)
+                    ).isoformat()
+
                     tasks = [
                         task for task in tasks
                         if task["deadline"] <= end_date
@@ -118,7 +133,7 @@ def execute_task(prompt, new_status="Completed"):
                     ]
 
             else:
-                tasks = get_all_tasks()
+                tasks = get_all_tasks(user_id=user_id)
                 operation = "All tasks"
 
             result["results"] = [
@@ -142,22 +157,32 @@ def execute_task(prompt, new_status="Completed"):
                 "verified_count": len(tasks)
             }
 
-        # DELETE: Delete a task by its title.
+        # DELETE: Delete one of the current user's tasks.
         elif any(word in text for word in ("delete", "remove")):
 
-            tasks = get_all_tasks()
+            tasks = get_all_tasks(user_id=user_id)
+
             matching = [
                 task for task in tasks
                 if task["title"].lower() in text
             ]
 
             if not matching:
-                raise ValueError("Could not identify the task to delete.")
+                raise ValueError(
+                    "Could not identify your task to delete."
+                )
 
             selected = matching[0]
-            deleted = delete_task(selected["id"])
 
-            check = get_task_by_id(selected["id"])
+            deleted = delete_task(
+                selected["id"],
+                user_id=user_id
+            )
+
+            check = get_task_by_id(
+                selected["id"],
+                user_id=user_id
+            )
 
             verified = deleted and check is None
 
@@ -178,16 +203,19 @@ def execute_task(prompt, new_status="Completed"):
             }
 
         # UPDATE: Change a deadline.
-        elif "change" in text or "update" in text or "move" in text:
+        elif any(word in text for word in (
+            "change", "update", "move"
+        )):
 
             deadline = parse_deadline(prompt)
 
             if not deadline:
                 raise ValueError(
-                    "Please specify a deadline such as 2026-11-20."
+                    "Please specify a valid deadline, "
+                    "such as 2026-11-20."
                 )
 
-            tasks = get_all_tasks()
+            tasks = get_all_tasks(user_id=user_id)
 
             matching = [
                 task for task in tasks
@@ -195,31 +223,45 @@ def execute_task(prompt, new_status="Completed"):
             ]
 
             if not matching:
-                raise ValueError("Could not identify the task to update.")
+                raise ValueError(
+                    "Could not identify your task to update."
+                )
 
             selected = matching[0]
 
             update_task(
                 selected["id"],
-                deadline=deadline
+                deadline=deadline,
+                user_id=user_id
             )
 
-            updated = get_task_by_id(selected["id"])
-            verified = updated["deadline"] == deadline
+            updated = get_task_by_id(
+                selected["id"],
+                user_id=user_id
+            )
+
+            verified = (
+                updated is not None
+                and updated["deadline"] == deadline
+            )
 
             result["status"] = "SUCCESS" if verified else "FAILED"
-            result["results"] = [{
-                "question": updated["title"],
-                "status": updated["status"],
-                "deadline": updated["deadline"],
-                "priority": updated["priority"]
-            }]
+
+            if updated:
+                result["results"] = [{
+                    "question": updated["title"],
+                    "status": updated["status"],
+                    "deadline": updated["deadline"],
+                    "priority": updated["priority"]
+                }]
 
             result["verification"] = {
                 "agent": "Task Manager Database Verifier",
                 "verification_status": "PASSED" if verified else "FAILED",
                 "expected_deadline": deadline,
-                "actual_deadline": updated["deadline"]
+                "actual_deadline": (
+                    updated["deadline"] if updated else None
+                )
             }
 
             result["message"] = (
@@ -227,7 +269,7 @@ def execute_task(prompt, new_status="Completed"):
                 if verified else "Deadline verification failed."
             )
 
-        # CREATE: Create a task.
+        # CREATE: Create a new task for this user.
         else:
 
             title_match = re.search(
@@ -254,10 +296,14 @@ def execute_task(prompt, new_status="Completed"):
                 title,
                 status="Not Started",
                 deadline=deadline,
-                priority=priority
+                priority=priority,
+                user_id=user_id
             )
 
-            saved_task = get_task_by_id(task_id)
+            saved_task = get_task_by_id(
+                task_id,
+                user_id=user_id
+            )
 
             verified = (
                 saved_task is not None
@@ -267,18 +313,21 @@ def execute_task(prompt, new_status="Completed"):
 
             result["status"] = "SUCCESS" if verified else "FAILED"
 
-            result["results"] = [{
-                "question": saved_task["title"],
-                "status": saved_task["status"],
-                "deadline": saved_task["deadline"],
-                "priority": saved_task["priority"]
-            }]
+            if saved_task:
+                result["results"] = [{
+                    "question": saved_task["title"],
+                    "status": saved_task["status"],
+                    "deadline": saved_task["deadline"],
+                    "priority": saved_task["priority"]
+                }]
 
             result["verification"] = {
                 "agent": "Task Manager Database Verifier",
                 "verification_status": "PASSED" if verified else "FAILED",
                 "expected_deadline": deadline,
-                "actual_deadline": saved_task["deadline"]
+                "actual_deadline": (
+                    saved_task["deadline"] if saved_task else None
+                )
             }
 
             result["message"] = (
@@ -290,7 +339,7 @@ def execute_task(prompt, new_status="Completed"):
         result["error"] = str(error)
         result["message"] = "Task Manager operation failed."
 
-    save_evidence(result)
+    save_evidence(result, user_id)
 
     print("\nTask Manager result:", result["status"])
 
@@ -298,4 +347,7 @@ def execute_task(prompt, new_status="Completed"):
 
 
 if __name__ == "__main__":
-    print(execute_task("Show me all projects with deadlines."))
+    print(
+        "This agent requires an authenticated user_id. "
+        "Run it through the Gym-Anything application."
+    )

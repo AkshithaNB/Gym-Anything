@@ -1,0 +1,221 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gym-Anything | User Profile</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
+            margin: 0;
+            padding: 30px 15px;
+        }
+
+        .container {
+            max-width: 750px;
+            margin: auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 3px 15px #ddd;
+        }
+
+        h1, h2 {
+            color: #252b48;
+        }
+
+        .section {
+            margin-top: 25px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            margin-top: 7px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-family: inherit;
+        }
+
+        textarea {
+            min-height: 85px;
+            resize: vertical;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            margin-top: 25px;
+            background: #252b48;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 15px;
+        }
+
+        button:hover {
+            background: #414969;
+        }
+
+        .muted {
+            color: #666;
+            font-size: 13px;
+        }
+
+        .error {
+            color: #b91c1c;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>Your Profile</h1>
+
+    <p class="muted">
+        Enter your information once. Gym-Anything agents can
+        use relevant details when performing tasks.
+    </p>
+
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% endif %}
+
+    <form action="/profile" method="POST">
+
+        <div class="section">
+            <h2>Personal Information</h2>
+
+            <label>Personal Email</label>
+            <input
+                type="email"
+                name="personal_email"
+                value="{{ profile.get('personal_email') or '' }}"
+                placeholder="Personal email address"
+            >
+
+            <label>College / Work Email</label>
+            <input
+                type="email"
+                name="work_email"
+                value="{{ profile.get('work_email') or '' }}"
+                placeholder="Institution or company email"
+            >
+
+            <label>Phone Number</label>
+            <input
+                type="tel"
+                name="phone"
+                value="{{ profile.get('phone') or '' }}"
+                placeholder="Phone number"
+            >
+        </div>
+
+        <div class="section">
+            <h2>Academic / Professional Information</h2>
+
+            <label>College / Company</label>
+            <input
+                type="text"
+                name="institution"
+                value="{{ profile.get('institution') or '' }}"
+                placeholder="Institution or company name"
+            >
+
+            <label>Department</label>
+            <input
+                type="text"
+                name="department"
+                value="{{ profile.get('department') or '' }}"
+                placeholder="Example: AIML, CSE, Marketing"
+            >
+
+            <label>Current Role</label>
+            <input
+                type="text"
+                name="role"
+                value="{{ profile.get('role') or '' }}"
+                placeholder="Example: Student, Developer, Intern"
+            >
+
+            <label>Education</label>
+            <textarea
+                name="education"
+                placeholder="Enter your degree, university and education details"
+            >{{ profile.get('education') or '' }}</textarea>
+            <label for="year_of_study">Year of Study</label>
+            <input
+                type="text"
+                id="year_of_study"
+                name="year_of_study"
+                value="{{ profile.get('year_of_study', '') }}"
+                placeholder="e.g. 3rd Year"
+            >
+
+            <label>Experience</label>
+            <textarea
+                name="experience"
+                placeholder="Internships, projects and work experience"
+            >{{ profile.get('experience') or '' }}</textarea>
+        </div>
+
+        <div class="section">
+            <h2>Skills and Interests</h2>
+
+            <label>Technical Skills</label>
+            <textarea
+                name="skills"
+                placeholder="Example: Python, Java, Machine Learning, SQL"
+            >{{ profile.get('skills') or '' }}</textarea>
+
+            <label>Interests</label>
+            <textarea
+                name="interests"
+                placeholder="Example: Artificial Intelligence, Data Science"
+            >{{ profile.get('interests') or '' }}</textarea>
+
+            <label>Languages Known</label>
+            <input
+                type="text"
+                name="languages"
+                value="{{ profile.get('languages') or '' }}"
+                placeholder="Example: English, Telugu, Kannada"
+            >
+        </div>
+
+        <div class="section">
+            <h2>Additional Information</h2>
+
+            <label>Anything Else</label>
+            <textarea
+                name="additional_info"
+                placeholder="Other information you want your agents to know"
+            >{{ profile.get('additional_info') or '' }}</textarea>
+        </div>
+
+        <button type="submit">Save Profile</button>
+
+    </form>
+
+</div>
+
+</body>
+</html>

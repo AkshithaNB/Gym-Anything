@@ -1,58 +1,197 @@
 
-
-import json
-from pathlib import Path
-
 from playwright.sync_api import sync_playwright
 
+from app.database import get_user_profile, get_user_by_id
 from agents.prompt_parser import parse_prompt
 from agents.llm_question_understanding import understand_question
 from agents.agent_session import request_user_answer, update_session
 from verification.verifier import verify_form_results
+from agents.agent_session import request_answer_approval
+from agents.llm_question_understanding import (
+    understand_question,
+    generate_answer
+)
+
+# --------------------------------------------------
+# LOAD LOGGED-IN USER PROFILE
+# --------------------------------------------------
+
+def load_profile(user_id):
+
+    user = get_user_by_id(user_id)
+    saved_profile = get_user_profile(user_id)
+
+    if not user:
+        raise ValueError("User account not found.")
+
+    profile = dict(saved_profile) if saved_profile else {}
+    profile["full_name"] = user["full_name"]
+
+    return profile
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-PROFILE_FILE = BASE_DIR / "user_profile" / "profile.json"
-
-
-def load_profile():
-    with open(PROFILE_FILE, "r", encoding="utf-8") as file:
-        return json.load(file)
-
+# --------------------------------------------------
+# MATCH FORM QUESTION WITH PROFILE
+# --------------------------------------------------
 
 def match_answer(question, profile):
     question_lower = question.lower().strip()
 
-    # Step 1: Fast rule-based matching
     rules = {
-        "full_name": ["full name", "your name"],
-        "email": ["email", "email address"],
-        "college": ["college", "university", "institution"],
-        "department": ["department", "branch", "major"],
-        "year_of_study": ["year of study", "current year"],
-        "skills": ["skills", "programming languages", "technical skills"],
-        "ai_interest": ["interest in ai", "why are you interested in ai"]
+        "full_name": [
+            "full name", "your name", "what is your name"
+        ],
+        "personal_email": [
+            "personal email", "personal e-mail", "email address"
+        ],
+        "work_email": [
+            "college email", "university email",
+            "institutional email", "work email"
+        ],
+        "phone": [
+            "phone", "mobile number", "contact number"
+        ],
+        "institution": [
+            "college name", "university name",
+            "institution name", "name of institution"
+        ],
+        "department": [
+            "department", "branch", "major"
+        ],
+        "role": [
+            "role", "position"
+        ],
+        "education": [
+            "education", "qualification", "degree"
+        ],
+        "experience": [
+            "experience", "work experience"
+        ],
+        "skills": [
+            "skills", "programming languages", "technical skills"
+        ],
+        "interests": [
+            "list your interests", "what are your interests",
+            "hobbies", "areas of interest"
+        ],
+        "languages": [
+            "languages known", "which languages",
+            "languages you speak"
+        ],
+        "year_of_study": [
+            "year of study",
+            "current year",
+            "which year",
+            "year are you in",
+            "study year",
+            "academic year"
+        ],
+        "additional_info": [
+            "additional information", "anything else",
+            "additional details"
+        ]
     }
 
     for field, keywords in rules.items():
         if any(keyword in question_lower for keyword in keywords):
-            return profile.get(field)
-
-    # Step 2: Use Llama 3 for unfamiliar questions
+            answer = profile.get(field)
+            if answer:
+                return answer
+    if any(keyword in question_lower for keyword in [
+    "year of study",
+    "current year",
+    "which year",
+    "year are you in",
+    "study year",
+    "academic year"
+]):
+        return profile.get("year_of_study") or None
+    # Use the LLM only to identify a relevant saved profile field.
     field = understand_question(question, profile)
 
-    if field is None:
+    if field and field in profile:
+        return profile.get(field)
+
+    return None
+
+
+# --------------------------------------------------
+# NORMALIZE ANSWERS
+# --------------------------------------------------
+
+def normalize_answer(answer):
+
+    if isinstance(answer, list):
+        return ", ".join(map(str, answer))
+
+    return str(answer).strip()
+
+
+# --------------------------------------------------
+# ASK USER TO APPROVE, EDIT OR REJECT
+# --------------------------------------------------
+
+
+def get_approved_answer(question, suggested_answer, user_id):
+
+    suggestion = normalize_answer(suggested_answer)
+
+    print(f"Waiting for approval: {question}")
+    print(f"Suggested answer: {suggestion}")
+
+    answer = request_answer_approval(
+        question,
+        suggestion,
+        user_id=user_id
+    )
+
+    if not answer:
+        return None, "Rejected"
+
+    return answer, "Approved or Edited"
+
+
+# --------------------------------------------------
+# ASK USER FOR MISSING PROFILE INFORMATION
+# --------------------------------------------------
+
+def get_missing_answer(question, user_id):
+
+    prompt = (
+        "The Google Form contains a question that could not "
+        "be answered using your saved profile:\n\n"
+        f"{question}\n\n"
+        "Please provide your answer.\n"
+        "Type SKIP if you want to leave this field empty."
+    )
+
+    answer = request_user_answer(
+        prompt,
+        user_id=user_id
+    )
+
+    if not answer:
         return None
 
-    return profile.get(field)
+    if answer.strip().lower() in ("skip", "reject"):
+        return None
 
+    return answer.strip()
+
+
+# --------------------------------------------------
+# INSPECT GOOGLE FORM
+# --------------------------------------------------
 
 def inspect_and_match(page, profile):
+    print("Questions inspected. Starting form filling...")
+
     questions = page.locator('[role="listitem"]')
 
     print("\n===== FORM FIELD INSPECTION =====")
 
     for i in range(questions.count()):
+
         question = questions.nth(i)
         question_text = question.inner_text().strip()
 
@@ -60,7 +199,7 @@ def inspect_and_match(page, profile):
 
         print("\nQuestion:", question_text)
         print(
-            "Matched answer:",
+            "Suggested answer:",
             answer if answer is not None else "User input required"
         )
 
@@ -73,91 +212,185 @@ def inspect_and_match(page, profile):
         print("Detected controls:", controls.count())
 
 
-def fill_text_fields(page, profile):
-    questions = page.locator('[role="listitem"]')
+# --------------------------------------------------
+# FILL TEXT FIELDS WITH USER APPROVAL
+# --------------------------------------------------
+
+
+def fill_text_fields(page, profile, user_id):
     results = []
 
-    print("\n===== FILLING TEXT FIELDS =====")
+    open_ended_phrases = [
+        "why are you interested",
+        "why do you want",
+        "describe yourself",
+        "tell us about yourself",
+        "what motivates you",
+        "how do you",
+        "explain why",
+        "what interests you",
+        "describe your"
+    ]
+
+    questions = page.get_by_role("listitem")
+
+    print("Total question containers:", questions.count())
 
     for i in range(questions.count()):
-        question = questions.nth(i)
-        question_text = question.inner_text().strip()
+        item = questions.nth(i)
+        question_text = item.inner_text().strip()
 
-        answer = match_answer(question_text, profile)
-
-        # Ask user when no saved answer is available
-        if answer is None:
-            print("\n===== NEW QUESTION DETECTED =====")
-            print("Question:", question_text)
-
-            answer = request_user_answer(question_text)
-
-            if not answer:
-                print("No answer received. Skipping.")
-
-                results.append({
-                    "question": question_text,
-                    "status": "Needs user input"
-                })
-                continue
-
-        if isinstance(answer, list):
-            answer = ", ".join(answer)
-
-        textbox = question.locator(
-            'input[type="text"], textarea'
+        textbox = item.locator(
+            'input[type="text"], textarea, input[type="email"], input[type="number"]'
         )
 
-        # Fill only supported text fields
-        if textbox.count() == 1:
-            textbox.fill(str(answer))
+        if textbox.count() != 1:
+            print("Skipping unsupported question:", question_text)
+            continue
 
-            actual_value = textbox.input_value()
+        print("Processing question:", question_text)
 
-            if actual_value == str(answer):
-                status = "Verified"
-                print("Verification SUCCESS:", question_text)
+        is_open_ended = any(
+            phrase in question_text.lower()
+            for phrase in open_ended_phrases
+        )
+
+        answer = None
+        decision = ""
+
+        if is_open_ended:
+            suggested_answer = generate_answer(
+                question_text,
+                profile
+            )
+
+            if suggested_answer:
+                answer, decision = get_approved_answer(
+                    question_text,
+                    suggested_answer,
+                    user_id
+                )
+
+                if not answer:
+                    results.append({
+                        "question": question_text,
+                        "answer": "",
+                        "actual_value": None,
+                        "status": "Rejected",
+                        "decision": decision
+                    })
+                    continue
             else:
-                status = "Verification FAILED"
-                print("Verification FAILED:", question_text)
-
-            results.append({
-                "question": question_text,
-                "answer": str(answer),
-                "actual_value": actual_value,
-                "status": status
-            })
+                answer = get_missing_answer(
+                    question_text,
+                    user_id
+                )
+                decision = "User Provided"
 
         else:
-            print("Unsupported or ambiguous control:", question_text)
+            answer = match_answer(
+                question_text,
+                profile
+            )
 
+            if answer:
+                decision = "Profile Auto-filled"
+            else:
+                answer = get_missing_answer(
+                    question_text,
+                    user_id
+                )
+                decision = "User Provided"
+
+        if not answer:
             results.append({
                 "question": question_text,
-                "answer": str(answer),
-                "status": "Unsupported control"
+                "answer": "",
+                "actual_value": None,
+                "status": "Skipped",
+                "decision": decision
             })
+            continue
+
+        answer = normalize_answer(answer)
+
+        textbox.fill(answer)
+
+        actual_value = textbox.input_value().strip()
+
+        if actual_value == answer.strip():
+            status = "Verified"
+        else:
+            status = "Verification Failed"
+
+        result = {
+            "question": question_text,
+            "answer": answer,
+            "actual_value": actual_value,
+            "status": status,
+            "decision": decision
+        }
+
+        results.append(result)
+
+        update_session(
+            "results",
+            results,
+            user_id=user_id
+        )
+
+        print(f"Question: {question_text}")
+        print(f"Expected: {answer}")
+        print(f"Actual: {actual_value}")
+        print(f"Status: {status}")
 
     return results
 
+# --------------------------------------------------
+# MAIN GOOGLE FORMS AGENT
+# --------------------------------------------------
 
-def execute_agent(form_url, user_prompt):
-    if not form_url.startswith("https://docs.google.com/forms/"):
+def execute_agent(form_url, user_prompt, user_id):
+
+    if not form_url.startswith(
+        "https://docs.google.com/forms/"
+    ):
         raise ValueError("Invalid Google Forms URL")
 
-    profile = load_profile()
+    if user_id is None:
+        raise ValueError("A logged-in user ID is required.")
+
+    # Retrieve this user's profile only.
+    profile = load_profile(user_id)
+
     profile = parse_prompt(user_prompt, profile)
 
-    print("\n===== AGENT EXECUTION STARTED =====")
+    print("\n===== GOOGLE FORMS AGENT STARTED =====")
+    print("User ID:", user_id)
+    print("Profile loaded for:", profile.get("full_name"))
 
-    update_session("status", "running")
-    update_session("results", [])
-    update_session("verification", None)
-    update_session("message", "")
+    update_session(
+        "status", "running", user_id=user_id
+    )
+
+    update_session(
+        "results", [], user_id=user_id
+    )
+
+    update_session(
+        "verification", None, user_id=user_id
+    )
+
+    update_session(
+        "message", "Opening Google Form.", user_id=user_id
+    )
 
     with sync_playwright() as p:
+
         browser = p.chromium.launch(headless=False)
 
         try:
+
             page = browser.new_page()
 
             page.goto(
@@ -169,26 +402,42 @@ def execute_agent(form_url, user_prompt):
 
             print("Form opened:", page.title())
 
-            # Step 1: Inspect the form
+            # Step 1: Inspect questions.
             inspect_and_match(page, profile)
 
-            # Step 2: Fill supported fields
-            results = fill_text_fields(page, profile)
+            # Step 2: Ask the user to approve answers.
+            results = fill_text_fields(
+                page,
+                profile,
+                user_id
+            )
 
-            # Step 3: Independently verify results
+            # Step 3: Independently verify filled fields.
             verification = verify_form_results(results)
+            print("\n===== DEBUG VERIFICATION =====")
+            for item in results:
+                print(item)
 
-            # Step 4: Prepare final report
-            if verification["verification_status"] == "PASSED":
-                message = (
-                    "Form filled and verified successfully. "
-                    "Please review and submit manually."
-                )
-            else:
-                message = (
-                    "Some fields could not be verified. "
-                    "Please review the form."
-                )
+            print("\n===== VERIFIER REPORT =====")
+            print(verification)
+
+            # Step 4: Prepare report.
+            verified_count = sum(
+                1 for result in results
+                if result.get("status") == "Verified"
+            )
+
+            rejected_count = sum(
+                1 for result in results
+                if result.get("status") == "Rejected by user"
+            )
+
+            message = (
+                f"Form processing completed. "
+                f"Verified fields: {verified_count}. "
+                f"Rejected fields: {rejected_count}. "
+                "Please review the form and submit manually."
+            )
 
             final_report = {
                 "title": page.title(),
@@ -197,55 +446,69 @@ def execute_agent(form_url, user_prompt):
                 "message": message
             }
 
-            # Step 5: Update dashboard
-            update_session("results", results)
-            update_session("verification", verification)
-            update_session("message", message)
-            update_session("status", "completed")
+            # Step 5: Update this user's session.
+            update_session(
+                "results",
+                results,
+                user_id=user_id
+            )
 
-            print("\nForm is ready for human review.")
-            print("Review the answers and submit manually if everything is correct.")
+            update_session(
+                "verification",
+                verification,
+                user_id=user_id
+            )
 
-                # Keep the browser open until the user closes the form window
-            page.wait_for_event("close")
+            update_session(
+                "message",
+                message,
+                user_id=user_id
+            )
 
-
+            update_session(
+                "status",
+                "completed",
+                user_id=user_id
+            )
 
             print("\n===== FINAL AGENT REPORT =====")
             print(message)
 
+            print(
+                "\nReview the answers and submit the form manually."
+            )
+
+            # Never automatically submit the form.
+            page.wait_for_event("close")
+
             return final_report
 
         except Exception as error:
-            update_session("status", "failed")
-            update_session("message", str(error))
-            print("Agent error:", error)
+
+            update_session(
+                "status",
+                "failed",
+                user_id=user_id
+            )
+
+            update_session(
+                "message",
+                str(error),
+                user_id=user_id
+            )
+
+            print("Google Forms Agent error:", error)
+
             raise
 
         finally:
+
             browser.close()
 
 
-def start_agent():
-    print("\n===== GOOGLE FORMS AGENT =====")
-
-    profile = load_profile()
-
-    print("Profile loaded:", profile.get("full_name"))
-
-    form_url = input("\nEnter Google Form URL: ").strip()
-
-    if not form_url.startswith("https://docs.google.com/forms/"):
-        print("Invalid Google Forms URL.")
-        return
-
-    user_prompt = input("\nEnter task instructions: ")
-
-    report = execute_agent(form_url, user_prompt)
-
-    print("\nFinal report:")
-    print(json.dumps(report, indent=4, ensure_ascii=False))
-
-
 if __name__ == "__main__":
-    start_agent()
+
+    print(
+        "Google Forms Agent must be started "
+        "through the authenticated Gym-Anything dashboard."
+    )
