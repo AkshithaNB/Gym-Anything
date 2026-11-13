@@ -1,0 +1,53 @@
+
+[
+    {
+        "id": 1,
+        "name": "Black Running Sneakers",
+        "brand": "Roadster",
+        "category": "Shoes",
+        "color": "Black",
+        "size": 7,
+        "price": 1499,
+        "rating": 4.2
+    },
+    {
+        "id": 2,
+        "name": "Black Sports Shoes",
+        "brand": "Campus",
+        "category": "Shoes",
+        "color": "Black",
+        "size": 7,
+        "price": 1299,
+        "rating": 4.4
+    },
+    {
+        "id": 3,
+        "name": "White Casual Sneakers",
+        "brand": "Puma",
+        "category": "Shoes",
+        "color": "White",
+        "size": 7,
+        "price": 1899,
+        "rating": 4.5
+    },
+    {
+        "id": 4,
+        "name": "Black Walking Shoes",
+        "brand": "Sparx",
+        "category": "Shoes",
+        "color": "Black",
+        "size": 8,
+        "price": 999,
+        "rating": 4.1
+    },
+    {
+        "id": 5,
+        "name": "Black Casual Sneakers",
+        "brand": "HRX",
+        "category": "Shoes",
+        "color": "Black",
+        "size": 7,
+        "price": 1799,
+        "rating": 4.6
+    }
+]

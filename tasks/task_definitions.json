@@ -1,0 +1,32 @@
+
+{
+    "experiment_name": "Gym-Anything",
+    "version": "1.0",
+
+    "tasks": [
+        {
+            "task_id": 1,
+            "task_name": "Complete Python Assignment",
+            "action": "add_and_update",
+            "expected_status": "Completed"
+        },
+        {
+            "task_id": 2,
+            "task_name": "Prepare Research Proposal",
+            "action": "add_and_update",
+            "expected_status": "Completed"
+        },
+        {
+            "task_id": 3,
+            "task_name": "Study Machine Learning",
+            "action": "add_and_update",
+            "expected_status": "Completed"
+        },
+        {
+            "task_id": 4,
+            "task_name": "Complete Database Assignment",
+            "action": "add_and_update",
+            "expected_status": "Completed"
+        }
+    ]
+}

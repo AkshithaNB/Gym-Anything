@@ -1,0 +1,28 @@
+
+# Python environment
+.venv/
+__pycache__/
+*.pyc
+
+# Database files
+*.db
+*.sqlite3
+
+# Browser profiles
+ajio_browser_profile/
+
+# User-specific data
+user_profile/
+agent_state/
+
+# Evidence and logs
+evidence/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# IDE and system files
+.vscode/
+.DS_Store
